@@ -9,8 +9,8 @@ import logging
 import socket
 from typing import Optional, Dict
 
-from telestheteband import Band
-from telesthetetransport.discovery import Discovery
+from telesthete.band import Band
+from telesthete.transport.discovery import Discovery
 from .hid import HIDCapture, HIDInjector, HIDEvent, HIDState
 from .edge import CoordinateMapper, EdgeDetector, Monitor
 from .clipboard_sync import ClipboardMonitor, ClipboardSyncer, ClipboardData
