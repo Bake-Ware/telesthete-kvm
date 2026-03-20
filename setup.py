@@ -29,9 +29,11 @@ setup(
     ],
     python_requires=">=3.10",
     install_requires=[
-        "telesthete>=0.1.0",
         "pynput>=1.7.6",
         "pyperclip>=1.8.2",
+    ],
+    dependency_links=[
+        "git+https://github.com/Bake-Ware/telesthete.git#egg=telesthete-0.1.0",
     ],
     entry_points={
         "console_scripts": [

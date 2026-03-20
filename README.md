@@ -17,18 +17,18 @@ Built on [Telesthete](https://github.com/Bake-Ware/telesthete) P2P transport lib
 ## Installation
 
 ```bash
-# Install from GitHub
+# Install dependencies (including telesthete library from GitHub)
+pip install git+https://github.com/Bake-Ware/telesthete.git
 pip install git+https://github.com/Bake-Ware/telesthete-kvm.git
 
-# Or clone and install locally
+# Or use requirements.txt
 git clone https://github.com/Bake-Ware/telesthete-kvm.git
 cd telesthete-kvm
+pip install -r requirements.txt
 pip install -e .
 ```
 
-**Note:** Not yet published to PyPI. Install from GitHub for now.
-
-**Dependencies:** Automatically installs `telesthete`, `pynput`, and `pyperclip` from GitHub/PyPI.
+**Note:** Both `telesthete` (the P2P library) and `telesthete-kvm` are on GitHub, not PyPI yet.
 
 ## Quick Start
 

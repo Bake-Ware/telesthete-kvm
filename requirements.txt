@@ -1,5 +1,5 @@
-# Transport library
-telesthete>=0.1.0
+# Transport library (from GitHub)
+git+https://github.com/Bake-Ware/telesthete.git
 
 # KVM dependencies
 pynput>=1.7.6
