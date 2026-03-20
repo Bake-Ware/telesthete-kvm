@@ -1,0 +1,26 @@
+[
+  {
+    "id": 0,
+    "peer": "desktop",
+    "x": 0,
+    "y": 0,
+    "width": 1920,
+    "height": 1080
+  },
+  {
+    "id": 1,
+    "peer": "desktop",
+    "x": 1920,
+    "y": 0,
+    "width": 1920,
+    "height": 1080
+  },
+  {
+    "id": 0,
+    "peer": "laptop",
+    "x": 3840,
+    "y": 0,
+    "width": 1920,
+    "height": 1080
+  }
+]
