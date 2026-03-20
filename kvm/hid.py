@@ -45,8 +45,8 @@ class HIDState:
 
     def to_bytes(self) -> bytes:
         """Serialize to bytes for transmission"""
-        # Format: timestamp(4) + num_keys(2) + keys(variable) + buttons(1) + x(4) + y(4)
-        data = self.timestamp.to_bytes(4, 'big')
+        # Format: timestamp(8) + num_keys(2) + keys(variable) + buttons(1) + x(4) + y(4)
+        data = self.timestamp.to_bytes(8, 'big')
         data += len(self.pressed_keys).to_bytes(2, 'big')
 
         for key in sorted(self.pressed_keys):
@@ -61,10 +61,10 @@ class HIDState:
     @staticmethod
     def from_bytes(data: bytes) -> 'HIDState':
         """Deserialize from bytes"""
-        timestamp = int.from_bytes(data[0:4], 'big')
-        num_keys = int.from_bytes(data[4:6], 'big')
+        timestamp = int.from_bytes(data[0:8], 'big')
+        num_keys = int.from_bytes(data[8:10], 'big')
 
-        offset = 6
+        offset = 10
         pressed_keys = set()
         for _ in range(num_keys):
             key = int.from_bytes(data[offset:offset+4], 'big')
@@ -94,9 +94,9 @@ class HIDEvent:
 
     def to_bytes(self) -> bytes:
         """Serialize to bytes for transmission"""
-        # Format: type(1) + timestamp(4) + data(variable)
+        # Format: type(1) + timestamp(8) + data(variable)
         result = bytes([self.event_type])
-        result += self.timestamp.to_bytes(4, 'big')
+        result += self.timestamp.to_bytes(8, 'big')
 
         if self.event_type == HIDEventType.KEY_PRESS:
             result += self._encode_key(self.data['key'])
@@ -119,10 +119,10 @@ class HIDEvent:
     def from_bytes(data: bytes) -> 'HIDEvent':
         """Deserialize from bytes"""
         event_type = HIDEventType(data[0])
-        timestamp = int.from_bytes(data[1:5], 'big')
+        timestamp = int.from_bytes(data[1:9], 'big')
 
         event_data = {}
-        offset = 5
+        offset = 9
 
         if event_type in (HIDEventType.KEY_PRESS, HIDEventType.KEY_RELEASE):
             event_data['key'] = HIDEvent._decode_key(data[offset:])
