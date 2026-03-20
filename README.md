@@ -231,3 +231,11 @@ MIT License
 
 - [Telesthete Library](https://github.com/Bake-Ware/telesthete) - Transport layer
 - Issues: Report bugs on GitHub
+
+## Installation (Quick)
+
+**Windows:** Double-click `install.bat` or run `.\install.ps1` in PowerShell
+
+**Linux/Mac:** `pip install git+https://github.com/Bake-Ware/telesthete-kvm.git`
+
+See [INSTALL.md](INSTALL.md) for detailed instructions.
