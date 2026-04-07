@@ -1,5 +1,6 @@
 # Transport library (from GitHub)
-git+https://github.com/Bake-Ware/telesthete.git
+# Use telesthete[ws] for Telesthetium hub support (internet mode)
+git+https://github.com/Bake-Ware/telesthete.git#egg=telesthete[ws]
 
 # KVM dependencies
 pynput>=1.7.6

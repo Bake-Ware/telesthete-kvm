@@ -40,7 +40,8 @@ class KVMApp:
         psk: str,
         hostname: Optional[str] = None,
         bind_port: int = 9999,
-        enable_discovery: bool = True
+        enable_discovery: bool = True,
+        hub_url: Optional[str] = None,
     ):
         """
         Initialize KVM app
@@ -50,14 +51,21 @@ class KVMApp:
             hostname: This machine's hostname (auto-detected if None)
             bind_port: Port for Band connections
             enable_discovery: Enable LAN discovery
+            hub_url: Telesthetium hub URL for internet mode (e.g. ws://host:8765).
+                     If set, uses WebSocket transport through the hub instead of
+                     direct UDP. Discovery is disabled in hub mode.
         """
         self.hostname = hostname or socket.gethostname()
         self.psk = psk
         self.bind_port = bind_port
-        self.enable_discovery = enable_discovery
+        self.hub_url = hub_url
+        self.enable_discovery = enable_discovery and not hub_url
 
-        # Band for communication
-        self.band = Band(psk, self.hostname, bind_port=bind_port)
+        # Band for communication — hub mode or direct UDP
+        if hub_url:
+            self.band = Band.from_hub(psk, hub_url, hostname=self.hostname)
+        else:
+            self.band = Band(psk, self.hostname, bind_port=bind_port)
 
         # Discovery
         self.discovery: Optional[Discovery] = None
@@ -99,7 +107,10 @@ class KVMApp:
 
         # Start Band
         await self.band.start()
-        logger.info(f"KVM started on {self.band.transport.local_address}")
+        if self.hub_url:
+            logger.info(f"KVM started via Telesthetium hub: {self.hub_url}")
+        else:
+            logger.info(f"KVM started on {self.band.transport.local_address}")
 
         # Setup streams
         self.stream_hid_events = self.band.stream(self.STREAM_HID_EVENTS, priority=0)
@@ -341,6 +352,7 @@ async def main():
     parser.add_argument("--hostname", help="Hostname (default: auto-detect)")
     parser.add_argument("--port", type=int, default=9999, help="Port (default: 9999)")
     parser.add_argument("--no-discovery", action="store_true", help="Disable LAN discovery")
+    parser.add_argument("--hub", help="Telesthetium hub URL for internet mode (e.g. ws://host:8765)")
     parser.add_argument("--layout", help="Monitor layout JSON file")
 
     args = parser.parse_args()
@@ -356,7 +368,8 @@ async def main():
         psk=args.psk,
         hostname=args.hostname,
         bind_port=args.port,
-        enable_discovery=not args.no_discovery
+        enable_discovery=not args.no_discovery,
+        hub_url=args.hub,
     )
 
     # Load layout if provided
