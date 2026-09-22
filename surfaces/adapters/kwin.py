@@ -83,7 +83,11 @@ class KWinOrigin:
                 self.ids[uuid] = self._next_id
                 self.uuids[self._next_id] = uuid
                 self._next_id += 1
-        by_uuid = {row["uuid"]: row for row in self.rows}
+        by_uuid = {
+            row["uuid"]: row
+            for row in self.rows
+            if row["client"]["w"] and row["client"]["h"]
+        }
         surfaces = []
         for z, row in enumerate(self.rows):
             uuid = row["uuid"]
@@ -96,7 +100,7 @@ class KWinOrigin:
             if not c["w"] or not c["h"]:
                 continue
             parent_row = by_uuid.get(row["parent"])
-            parent = self.ids.get(row["parent"])
+            parent = self.ids.get(row["parent"]) if parent_row else None
             role = Role(row["role"]) if parent else Role.TOPLEVEL
             if parent and role == Role.TOPLEVEL:
                 role = Role.DIALOG

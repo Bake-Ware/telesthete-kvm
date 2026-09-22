@@ -8,6 +8,78 @@ from surfaces.session import ClientSession, OriginSession
 from surfaces.transport import DirectLink
 
 
+def test_live_catalog_and_authenticated_window_selection():
+    from surfaces.model import Rect, Role
+    from surfaces.protocol import encode
+
+    class Link:
+        channel_base = 100
+
+        def on_control(self, callback):
+            self.control = callback
+
+        def on_stream(self, _kind, _callback):
+            pass
+
+        def send_control(self, data):
+            self.peer.control(data)
+
+    a, b = Link(), Link()
+    a.peer, b.peer = b, a
+    selections = []
+    origin = OriginSession(a, "origin", "client", on_select=selections.append)
+    client = ClientSession(b, "client", "origin")
+    root = Surface(1, Size(100, 80), title="Editor")
+    child = Surface(
+        2,
+        Size(40, 30),
+        title="Dialog",
+        role=Role.DIALOG,
+        parent_id=1,
+        anchor=Rect(0, 0, 40, 30),
+    )
+    origin.set_catalog([root, child])
+    client.hello()
+    assert client.catalog == {1: root, 2: child}
+    assert not client.tree.surfaces
+    client.select_windows([1])
+    assert selections == [{1}]
+    # Children are listed but only their owning top-level can be selected.
+    from surfaces.model import ProtocolError
+
+    with pytest.raises(ProtocolError):
+        client.select_windows([2])
+    origin._control(
+        encode(
+            "window-select",
+            {"roots": [2]},
+            target="origin",
+            message_id="invalid-selection",
+            session_id=client.session_id,
+        )
+    )
+    assert selections == [{1}]
+    origin.set_catalog([root])
+    assert client.catalog == {1: root}
+    client.select_windows([])
+    assert selections[-1] == set()
+
+
+def test_catalog_rejects_missing_or_cyclic_parents():
+    from surfaces.model import ProtocolError, Role
+    from surfaces.session import catalog_map
+
+    with pytest.raises(ProtocolError):
+        catalog_map([Surface(1, Size(10, 10), role=Role.DIALOG, parent_id=2)])
+    with pytest.raises(ProtocolError):
+        catalog_map(
+            [
+                Surface(1, Size(10, 10), role=Role.DIALOG, parent_id=2),
+                Surface(2, Size(10, 10), role=Role.DIALOG, parent_id=1),
+            ]
+        )
+
+
 @pytest.mark.asyncio
 async def test_end_to_end_tiles_freeze_thaw_and_lost_whole_batch():
     a_port, b_port = port(), port()

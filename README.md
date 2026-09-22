@@ -13,10 +13,15 @@ is the product direction. Implementation lives here in `telesthete-kvm`;
 ## Status
 
 A native desktop prototype runs here now: KWin/PipeWire and Windows WGC
-origins, a Qt flat client, encrypted direct transport, lossless damage tiles,
-and a single H.264 atlas encoder. Six real KWin windows have streamed through
-one NVENC session. Windows capture, input and streaming were exercised on
-**win11-flophouse**.
+origins, a Qt window browser and flat viewer, encrypted direct transport,
+lossless damage tiles, and a single H.264 atlas encoder. The browser lists
+local and configured remote origin windows and opens selected windows in the
+viewer. Six real KWin windows have streamed through one NVENC session. Windows
+capture, input and streaming were exercised on **win11-flophouse**.
+
+On a configured Linux desktop, run `python -m surfaces ui` to browse and open
+local windows. Add `--origin-config origins.json` to list remote origins too;
+see the [prototype setup and commands](docs/spatial-prototype.md).
 
 Start with the [prototype setup and commands](docs/spatial-prototype.md),
 [validation evidence](docs/spatial-test-output.md), and

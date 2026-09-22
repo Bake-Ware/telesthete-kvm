@@ -4,6 +4,8 @@ import argparse
 import asyncio
 import json
 import os
+import secrets
+import socket
 import sys
 import time
 from dataclasses import asdict
@@ -26,7 +28,7 @@ def parser():
     parser = argparse.ArgumentParser(
         description="Telesthete Spatial Surfaces native window-streaming prototype"
     )
-    parser.add_argument("mode", choices=("list", "origin", "client"))
+    parser.add_argument("mode", choices=("list", "origin", "client", "ui"))
     parser.add_argument(
         "--backend",
         choices=("kwin", "windows"),
@@ -38,7 +40,7 @@ def parser():
     parser.add_argument(
         "--title",
         action="append",
-        help="Exact title to stream; repeat for multiple windows (owned children follow)",
+        help="Initially stream an exact title; omit for browser-controlled selection",
     )
     parser.add_argument("--lane", choices=("cold", "hot", "auto"), default="cold")
     parser.add_argument(
@@ -70,7 +72,7 @@ def parser():
     parser.add_argument(
         "--origin-config",
         type=Path,
-        help="Client JSON file with up to four configured origins",
+        help="Client/UI JSON file with up to four configured remote origins",
     )
     return parser
 
@@ -86,6 +88,8 @@ def adapter(args):
 
 
 async def run(args):
+    if args.mode == "ui":
+        return await run_ui(args)
     if args.origin_config:
         return await run_multi(args)
     native = None
@@ -113,13 +117,13 @@ async def run(args):
             if args.mode == "list":
                 print(json.dumps([asdict(s) for s in surfaces], indent=2))
                 return
-            if not args.title or any(
+            if args.title and any(
                 sum(s.title == title for s in surfaces) != 1 for title in args.title
             ):
                 raise ValueError(
                     "each --title must identify exactly one visible origin window"
                 )
-            selected = [s for s in surfaces if s.title in args.title]
+            selected = [s for s in surfaces if s.title in (args.title or ())]
             if any(s.parent_id is not None for s in selected):
                 raise ValueError(
                     "select the owning top-level window; its children follow automatically"
@@ -165,17 +169,23 @@ async def run(args):
                 elif cap == "close-request":
                     native.close_window(fields["surface_id"])
 
+            def select_windows(chosen):
+                roots.clear()
+                roots.update(chosen)
+
             session = OriginSession(
                 link,
                 args.name,
                 args.peer_name,
                 on_input=native.inject,
                 on_request=request,
+                on_select=select_windows,
                 hot_backend=args.encoder if args.lane in ("hot", "auto") else None,
                 adaptive=args.lane == "auto",
                 clipboard=clipboard_io,
             )
             session.set_surfaces(selected)
+            session.set_catalog(surfaces)
         else:
             session = ClientSession(
                 link, args.name, args.peer_name, clipboard=clipboard_io
@@ -197,6 +207,7 @@ async def run(args):
             if native:
                 if now - last_tree >= 0.1:
                     all_surfaces = native.snapshot()
+                    session.set_catalog(all_surfaces)
                     included = set(roots)
                     while True:
                         children = {
@@ -306,12 +317,7 @@ async def run(args):
 async def run_multi(args):
     if args.mode != "client" or args.clipboard or args.peer:
         raise ValueError("--origin-config is for a client; set each peer in the file")
-    import socket
-
-    config = json.loads(args.origin_config.read_text())
-    entries = config.get("origins") if isinstance(config, dict) else None
-    if not isinstance(entries, list) or not 1 <= len(entries) <= 4:
-        raise ValueError("origin config requires one to four origins")
+    entries = read_origin_config(args.origin_config)
     if args.headless:
         FlatClient = None
     else:
@@ -320,28 +326,12 @@ async def run_multi(args):
     links, sessions, shells = [], [], []
     started = time.monotonic()
     client_name = "client" if args.name == "origin" else args.name
-    used_names, used_binds = set(), set()
     try:
         for index, entry in enumerate(entries):
-            if (
-                not isinstance(entry, dict)
-                or set(entry) != {"name", "bind", "peer", "psk_file"}
-                and set(entry) != {"name", "bind", "peer", "psk_file", "channel_base"}
-            ):
-                raise ValueError("invalid origin config entry")
             name = entry["name"]
             bind = address(entry["bind"])
             peer_input = address(entry["peer"])
             peer = (socket.gethostbyname(peer_input[0]), peer_input[1])
-            if (
-                not isinstance(name, str)
-                or not name
-                or name in used_names
-                or bind in used_binds
-            ):
-                raise ValueError("duplicate or invalid origin name/bind")
-            used_names.add(name)
-            used_binds.add(bind)
             key_path = Path(entry["psk_file"])
             if not key_path.is_absolute():
                 key_path = args.origin_config.parent / key_path
@@ -409,6 +399,229 @@ async def run_multi(args):
         for shell in shells:
             shell.stop()
         await asyncio.gather(*(link.stop() for link in links), return_exceptions=True)
+
+
+def read_origin_config(path):
+    config = json.loads(path.read_text())
+    entries = config.get("origins") if isinstance(config, dict) else None
+    if not isinstance(entries, list) or not 1 <= len(entries) <= 4:
+        raise ValueError("origin config requires one to four origins")
+    used_names, used_binds = set(), set()
+    for entry in entries:
+        if (
+            not isinstance(entry, dict)
+            or set(entry) != {"name", "bind", "peer", "psk_file"}
+            and set(entry) != {"name", "bind", "peer", "psk_file", "channel_base"}
+        ):
+            raise ValueError("invalid origin config entry")
+        name, bind = entry["name"], address(entry["bind"])
+        if (
+            not isinstance(name, str)
+            or not name
+            or name in used_names
+            or bind in used_binds
+            or not isinstance(entry.get("channel_base", 100), int)
+        ):
+            raise ValueError("duplicate or invalid origin name/bind")
+        address(entry["peer"])
+        used_names.add(name)
+        used_binds.add(bind)
+    return entries
+
+
+def free_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+async def run_ui(args):
+    if args.peer or args.psk_file or args.title or args.headless or args.clipboard:
+        raise ValueError("ui manages its local origin; use --origin-config for remotes")
+    from .browser import WindowBrowser
+    from .client import FlatClient
+
+    client_name = "client" if args.name == "origin" else args.name
+    origin_port, client_port = free_port(), free_port()
+    while client_port == origin_port:
+        client_port = free_port()
+    secret = secrets.token_urlsafe(32)
+    environment = {**os.environ, "TELESTHETE_PSK": secret}
+    command = [
+        sys.executable,
+        "-m",
+        "surfaces",
+        "origin",
+        "--backend",
+        args.backend,
+        "--bridge",
+        args.bridge,
+        "--name",
+        "local",
+        "--peer-name",
+        client_name,
+        "--bind",
+        f"127.0.0.1:{origin_port}",
+        "--peer",
+        f"127.0.0.1:{client_port}",
+        "--lane",
+        args.lane,
+        "--encoder",
+        args.encoder,
+    ]
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        env=environment,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    local_errors = []
+
+    async def drain_errors():
+        while line := await process.stderr.readline():
+            local_errors.append(line.decode(errors="replace").strip())
+            local_errors[:] = local_errors[-4:]
+
+    drain_task = asyncio.create_task(drain_errors())
+    links, sessions, shells, connects = [], [], [], []
+    browser = None
+    started = time.monotonic()
+    try:
+        specs = [
+            (
+                "local",
+                ("127.0.0.1", client_port),
+                ("127.0.0.1", origin_port),
+                secret,
+                args.channel_base,
+            )
+        ]
+        if args.origin_config:
+            for entry in read_origin_config(args.origin_config):
+                peer = address(entry["peer"])
+                key_path = Path(entry["psk_file"])
+                if not key_path.is_absolute():
+                    key_path = args.origin_config.parent / key_path
+                specs.append(
+                    (
+                        entry["name"],
+                        address(entry["bind"]),
+                        (socket.gethostbyname(peer[0]), peer[1]),
+                        key_path.read_text().strip(),
+                        entry.get("channel_base", 100),
+                    )
+                )
+        def add_connection(name, bind, peer, key, base):
+            if (
+                not name
+                or not key
+                or len(sessions) >= 5
+                or name in {session.origin_name for session in sessions}
+                or bind[1] in {link.band.bind_port for link in links}
+            ):
+                raise ValueError("origin needs a unique name, port, and secret (up to four remotes)")
+            index = len(sessions)
+            link = DirectLink(
+                key, client_name, bind, peer, channel_base=base, expected_peer=name
+            )
+            session = ClientSession(link, client_name, name)
+            links.append(link)
+            sessions.append(session)
+            shells.append(FlatClient(session, placement_offset=(index * 400, 0)))
+
+            async def connect(current_link=link, current_session=session):
+                await current_link.start(timeout=30)
+                current_session.hello()
+
+            connects.append(asyncio.create_task(connect()))
+            if browser:
+                browser.session_added()
+
+        for name, bind, peer, key, base in specs:
+            add_connection(name, bind, peer, key, base)
+
+        def add_remote(name, peer_text, port, key):
+            remote = address(peer_text)
+            peer = socket.gethostbyname(remote[0]), remote[1]
+            add_connection(name, ("0.0.0.0", port), peer, key, args.channel_base)
+
+        browser = WindowBrowser(sessions, on_add_remote=add_remote)
+        last_hints = last_ping = 0.0
+        while not browser.closed and (
+            not args.seconds or time.monotonic() - started < args.seconds
+        ):
+            now = time.monotonic()
+            statuses = []
+            for index, (session, shell, task) in enumerate(
+                zip(sessions, shells, connects)
+            ):
+                if task.done():
+                    error = task.exception()
+                    if error:
+                        statuses.append(f"{session.origin_name}: {error}")
+                        continue
+                    shell.poll()
+                    if now - last_hints >= 0.1:
+                        session.hints(shell.hints())
+                    if now - last_ping >= 0.25:
+                        session.ping()
+                    session.repair()
+                    statuses.append(
+                        f"{session.origin_name}: {len(session.catalog)} windows"
+                    )
+                else:
+                    statuses.append(f"{session.origin_name}: connecting…")
+            if process.returncode is not None:
+                statuses[0] = f"local: origin exited ({process.returncode})"
+                if local_errors:
+                    statuses[0] += f" — {local_errors[-1]}"
+            browser.poll(statuses)
+            if now - last_hints >= 0.1:
+                last_hints = now
+            if now - last_ping >= 0.25:
+                last_ping = now
+            await asyncio.sleep(0.01)
+    finally:
+        if args.stats:
+            args.stats.write_text(
+                json.dumps(
+                    {
+                        "mode": "ui",
+                        "origins": {
+                            session.origin_name: {
+                                "catalog_windows": len(session.catalog),
+                                "streamed_windows": len(session.tree.surfaces),
+                                "ready_textures": sum(
+                                    texture.ready
+                                    for texture in session.textures.values()
+                                ),
+                                "errors": session.errors,
+                            }
+                            for session in sessions
+                        },
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
+        if browser:
+            browser.stop()
+        for task in connects:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*connects, return_exceptions=True)
+        for shell in shells:
+            shell.stop()
+        await asyncio.gather(*(link.stop() for link in links), return_exceptions=True)
+        if process.returncode is None:
+            process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), 3)
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.wait()
+        drain_task.cancel()
+        await asyncio.gather(drain_task, return_exceptions=True)
 
 
 def main():

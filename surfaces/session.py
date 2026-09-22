@@ -34,6 +34,23 @@ def negotiated_canvas(decoders):
     raise ProtocolError("hot lane requires an H.264 420-8 decoder supporting 60 fps")
 
 
+def catalog_map(surfaces):
+    if len(surfaces) > 512:
+        raise ProtocolError("window catalog limit exceeded")
+    proposed = {surface.surface_id: surface for surface in surfaces}
+    if len(proposed) != len(surfaces):
+        raise ProtocolError("duplicate catalog surface IDs")
+    for surface in proposed.values():
+        seen = {surface.surface_id}
+        parent = surface.parent_id
+        while parent is not None:
+            if parent not in proposed or parent in seen:
+                raise ProtocolError("invalid catalog parent")
+            seen.add(parent)
+            parent = proposed[parent].parent_id
+    return proposed
+
+
 class OriginSession:
     def __init__(
         self,
@@ -43,6 +60,7 @@ class OriginSession:
         *,
         on_input=None,
         on_request=None,
+        on_select=None,
         hot_backend=None,
         adaptive=False,
         clipboard=None,
@@ -50,6 +68,7 @@ class OriginSession:
         self.link, self.name, self.client_name = link, name, client_name
         self.on_input = on_input
         self.on_request = on_request
+        self.on_select = on_select
         self.last_seen = time.monotonic()
         self.hot = None
         self.adaptive = adaptive
@@ -83,6 +102,8 @@ class OriginSession:
         self._source_buffers = {}
         self._requests = OrderedDict()
         self._hello_id = None
+        self.catalog = {}
+        self.catalog_rev = 0
         self.errors = []
         self.link.on_control(self._control)
         self.link.on_stream("hints", self._hint)
@@ -213,6 +234,7 @@ class OriginSession:
                     },
                 )
                 self._snapshot()
+                self._catalog()
                 self.refresh.update(self.tree.surfaces)
                 return
             if body["id"] in self._requests:
@@ -245,6 +267,22 @@ class OriginSession:
                     self.on_request(cap, args)
             elif cap == "snapshot-request":
                 self._snapshot()
+            elif cap == "window-select":
+                roots = args["roots"]
+                if (
+                    not isinstance(roots, list)
+                    or len(roots) > 16
+                    or any(
+                        type(sid) is not int
+                        or sid not in self.catalog
+                        or self.catalog[sid].parent_id is not None
+                        for sid in roots
+                    )
+                    or len(set(roots)) != len(roots)
+                ):
+                    raise ProtocolError("invalid window selection")
+                if self.on_select:
+                    self.on_select(set(roots))
             elif cap == "lane-resync":
                 if args["lane_id"] == 0 and self.hot:
                     self.hot.force_keyframe = True
@@ -395,6 +433,24 @@ class OriginSession:
                 self.refresh.add(surface.surface_id)
         if self.session_id and steps is None:
             self._snapshot()
+
+    def set_catalog(self, surfaces: list[Surface]):
+        proposed = catalog_map(surfaces)
+        if proposed == self.catalog:
+            return
+        self.catalog = proposed
+        self.catalog_rev += 1
+        if self.session_id:
+            self._catalog()
+
+    def _catalog(self):
+        self._send(
+            "window-catalog",
+            {
+                "catalog_rev": str(self.catalog_rev),
+                "surfaces": [surface_to_dict(s) for s in self.catalog.values()],
+            },
+        )
 
     def _snapshot(self):
         from .hot import layout_to_dict
@@ -643,6 +699,8 @@ class ClientSession:
         self.session_id = None
         self.hello_id = uuid.uuid4().hex
         self.tree = TreeReplica()
+        self.catalog = {}
+        self.catalog_rev = -1
         self.textures = {}
         self.assignments = {}
         self.cold_candidates = {}
@@ -741,6 +799,15 @@ class ClientSession:
                 old = self.tree.surfaces.copy()
                 if self.tree.snapshot(counter(args["tree_rev"]), surfaces):
                     self._sync_textures(old)
+            elif cap == "window-catalog":
+                revision = counter(args["catalog_rev"])
+                raw = args["surfaces"]
+                if not isinstance(raw, list) or len(raw) > 512:
+                    raise ProtocolError("invalid window catalog")
+                catalog = [surface_from_dict(item) for item in raw]
+                proposed = catalog_map(catalog)
+                if revision > self.catalog_rev:
+                    self.catalog, self.catalog_rev = proposed, revision
             elif cap in ("surface-add", "surface-update", "surface-remove"):
                 old = self.tree.surfaces.copy()
                 revision = counter(args["tree_rev"])
@@ -960,6 +1027,17 @@ class ClientSession:
 
     def request(self, cap, surface_id, **args):
         self._send(cap, {"surface_id": surface_id, **args})
+
+    def select_windows(self, roots):
+        if self.session_id is None:
+            raise ProtocolError("origin is not connected")
+        roots = sorted(set(roots))
+        if len(roots) > 16 or any(
+            sid not in self.catalog or self.catalog[sid].parent_id is not None
+            for sid in roots
+        ):
+            raise ProtocolError("selection must contain available top-level windows")
+        self._send("window-select", {"roots": roots})
 
     def ping(self):
         if self.session_id:

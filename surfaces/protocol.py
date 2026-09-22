@@ -33,6 +33,8 @@ CAPS = frozenset(
         "surface-ping",
         "surface-release",
         "surface-lane",
+        "window-catalog",
+        "window-select",
     }
 )
 _SESSION = re.compile(r"[0-9a-f]{32}\Z")

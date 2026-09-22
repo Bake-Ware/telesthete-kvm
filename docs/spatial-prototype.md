@@ -20,6 +20,9 @@ reference and a way to operate the Windows testbed.
 - A Qt flat client with local placement, letterboxing, native keycodes, pointer
   routing, popup anchoring, modal dialog windows and debounced source resizing.
   Losing client focus releases held origin input. No eye views cross the wire.
+- A Qt browser lists live windows on this computer and up to four explicitly
+  configured remote origins. Open/Stop controls select streams without restarting
+  origins. Owned dialogs follow their selected top-level window.
 - Hot H.264 atlases with 64-pixel allocation alignment, 16-pixel replicated
   gutters, epoch-safe cuts, keyframes on layout changes and explicit resync. In-slot
   resizes retain allocations and the encoder, advancing the crop epoch safely. Six native
@@ -83,6 +86,50 @@ path. `--encoder software` uses GStreamer's x264; `portable` uses PyAV's x264.
 The GStreamer VAAPI path is present but unvalidated on a VAAPI-capable machine.
 
 ## Run
+
+For the quickest local test on a machine with the native dependencies and KWin
+bridge (or on Windows with the spatial extras installed), launch the browser:
+
+```sh
+python -m surfaces ui
+```
+
+The browser starts a local origin with a temporary loopback secret, lists its
+open windows, and opens the selected ones in separate viewer windows. Double-click
+a row or use **Open selected**; **Stop selected** ends its stream. Search filters
+the list. Closing a viewer hides it; use Stop and Open to restart that view.
+`--lane auto --encoder nvenc` enables adaptive video on tested Linux hardware;
+use `--encoder portable` for Windows. No secret file is needed for local browsing.
+
+To browse a remote machine, start an origin there without `--title`. For example:
+
+```sh
+python -m surfaces origin --name windows --peer-name client \
+  --bind 0.0.0.0:10002 --peer CLIENT_IP:10003 --psk-file spatial.psk
+```
+
+In the browser, click **Add remote…** and enter the origin name (`windows`),
+its `IP:port`, local receive port (`10003` in this example), and the same
+secret. The origin must already be running and configured with the browser
+machine's IP and that receive port. This connection lasts for the browser
+session.
+
+For a reusable setup, create `origins.json` on the browser machine with the
+matching endpoint and secret:
+
+```json
+{"origins": [
+  {"name": "windows", "bind": "0.0.0.0:10003", "peer": "WINDOWS_IP:10002", "psk_file": "spatial.psk"}
+]}
+```
+
+Run `python -m surfaces ui --origin-config origins.json`. Start the remote origin
+before connecting from the browser. Each remote needs a distinct name and local
+bind port; the existing direct-peer transport does not discover machines
+automatically. The origin sends a live window catalog, and captures only windows
+selected in the browser. Use an IP address reachable through the host firewall.
+
+The CLI flow remains available for scripted tests:
 
 Create a dedicated shared test secret and copy it securely to both peers:
 

@@ -129,6 +129,8 @@ Unless indicated, fields below are required in addition to common args.
 | `surface-hello` | Client → origin | `caps` (client caps) |
 | `surface-welcome` | Origin → client | `hello_id`, `caps` (origin caps), `channels:{control,clipboard,hints,motion}`, `lanes:[{lane_id,kind,stream_id,codec}]`, `route:"direct"|"relay"` |
 | `surface-snapshot` | Origin → client | `tree_rev:u64`, `surfaces:[surface]`, `layouts:[layout]` |
+| `window-catalog` | Origin → client | `catalog_rev:u64`, `surfaces:[surface]` for all currently capturable windows |
+| `window-select` | Client → origin | `roots:[surface_id]` (up to 16 current top-level IDs); replaces this client's selection |
 | `surface-add` | Origin → client | `tree_rev`, `surface` (complete record) |
 | `surface-update` | Origin → client | `tree_rev`, `surface_id`, `changes` (partial mutable record; no ID mutation) |
 | `surface-remove` | Origin → client | `tree_rev`, `surface_id`; remove children first |
@@ -152,6 +154,12 @@ compatible codecs return the normal Rook error reply. Requests are deduplicated
 by `(session_id,id)`; input/clipboard side effects must not run twice. An `ok`
 reply acknowledges acceptance, while tree deltas remain authoritative for WM
 focus, resize, close and hide outcomes.
+
+The catalog is separate from the subscribed surface tree: listing a window
+does not begin capture. The origin sends a full catalog at welcome and whenever
+it changes. Catalogs are bounded to 512 records with valid, acyclic parent
+relationships; `window-select` is admitted only for authenticated, current
+top-level IDs. Owned children follow the selected root in the streamed tree.
 
 Input union: each event includes `kind` and `surface_id`.
 
