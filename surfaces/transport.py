@@ -14,6 +14,8 @@ from telesthete import Band
 from telesthete.protocol.framing import ChannelType, unpack_packet
 from telesthete.transport.udp import UDPTransport
 
+from kvm.session_epoch import new_session_epoch
+
 from .model import ProtocolError
 
 
@@ -129,6 +131,7 @@ class DirectLink:
             bind_address=bind[0],
             bind_port=bind[1],
             capabilities=["spatial-surfaces-v1"],
+            session_epoch=new_session_epoch(),
         )
         transport = _PeerTransport(bind, peer, channel_base)
         for kind, handlers in self.band.transport._handlers.items():

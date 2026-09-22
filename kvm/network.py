@@ -17,6 +17,8 @@ from telesthete.band import Band
 from telesthete.protocol.stream import Stream
 from telesthete.transport.discovery import Discovery
 
+from .session_epoch import new_session_epoch
+
 log = logging.getLogger(__name__)
 VERSION = 2
 MAX_PACKET = 1400
@@ -35,9 +37,7 @@ class Network:
     def __init__(
         self, psk, hostname, callback, *, port=9999, discovery=True, peers=(), hub=None
     ):
-        # Nanosecond epochs reduce same-epoch collisions between peers sharing
-        # a key; wire fields support u64. Restart epochs increase with wall time.
-        self.band = Band(psk, hostname, bind_port=port, session_epoch=time.time_ns())
+        self.band = Band(psk, hostname, bind_port=port, session_epoch=new_session_epoch())
         self.hostname, self.callback = hostname, callback
         self.hub = hub
         if hub:
