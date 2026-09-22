@@ -42,7 +42,7 @@ flat workspace. Text clipboard sync is opt-in with `--clipboard` on both peers.
 
 ## Install
 
-Python 3.10+ is the package baseline. Native validation used Python 3.14 on
+Python 3.11+ is the package baseline. Native validation used Python 3.14 on
 cachyrig and Python 3.12 on Windows. From this checkout:
 
 ```sh

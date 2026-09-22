@@ -17,7 +17,7 @@ choose an X11 session at login. XWayland alone does not expose the entire deskto
 
 ## Windows
 
-Install Python 3.10+ and Git, then run `install.bat` or `install.ps1`. The scripts
+Install Python 3.11+ and Git, then run `install.bat` or `install.ps1`. The scripts
 create a virtual environment under your user profile and print the command path.
 No system Python packages are changed. Alternatively:
 

@@ -6,7 +6,7 @@ display and applications. There is no video, audio, or file forwarding.
 
 ## Install
 
-Requires Python 3.10+, Git, and a Windows or Linux **X11** desktop.
+Requires Python 3.11+, Git, and a Windows or Linux **X11** desktop.
 Native Wayland and macOS are not supported.
 
 ```sh

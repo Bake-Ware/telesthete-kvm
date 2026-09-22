@@ -1,7 +1,7 @@
 @echo off
 setlocal
 set "KVM_ENV=%USERPROFILE%\.telesthete-kvm"
-python -c "import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)"
+python -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)"
 if errorlevel 1 goto fail
 git --version >nul 2>&1
 if errorlevel 1 goto fail
@@ -15,5 +15,5 @@ echo Installed. Command: "%KVM_ENV%\Scripts\telesthete-kvm.exe"
 echo Create layout.json and kvm.psk, then pass --hostname, --layout, and --psk-file.
 exit /b 0
 :fail
-echo Installation failed. Python 3.10+, Git, and network access are required.
+echo Installation failed. Python 3.11+, Git, and network access are required.
 exit /b 1

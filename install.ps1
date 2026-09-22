@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $venv = Join-Path $env:USERPROFILE ".telesthete-kvm"
-python -c "import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)"
-if ($LASTEXITCODE -ne 0) { throw "Python 3.10 or newer is required" }
+python -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)"
+if ($LASTEXITCODE -ne 0) { throw "Python 3.11 or newer is required" }
 git --version
 if ($LASTEXITCODE -ne 0) { throw "Git is required" }
 python -m venv $venv
