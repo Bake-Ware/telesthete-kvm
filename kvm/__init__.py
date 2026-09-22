@@ -1,7 +1,11 @@
-"""
-Telesthete KVM - Software KVM over IP
-"""
+"""Telesthete KVM: encrypted keyboard, mouse and text clipboard sharing."""
 
-from .kvm import KVMApp
+__version__ = "0.3.0"
 
-__all__ = ["KVMApp"]
+
+def __getattr__(name):
+    if name == "KVMApp":
+        from .kvm import KVMApp
+
+        return KVMApp
+    raise AttributeError(name)
